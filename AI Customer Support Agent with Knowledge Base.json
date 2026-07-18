@@ -1,0 +1,401 @@
+{
+  "name": "AI Customer Support Agent with Knowledge Base",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "support-agent",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "7a9918c1-b706-472d-8ac2-3416a0aeaf8d",
+      "name": "Webhook",
+      "webhookId": "0fbe7944-cf09-4444-b177-bcff043e9650"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "679698b1-80fc-40cb-86d0-d48db46e5d51",
+              "name": "=question",
+              "value": "={{$json.body.question}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        208,
+        0
+      ],
+      "id": "7a840d42-5c0d-4794-b124-c6494db45b86",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "AQ.Ab8RN6KSDoQuxz9s4zdOBBKYf2itnvGtdjuxNptHDuP_GfDf3g"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"You are an AI customer support assistant.\\n\\nAnalyze the customer's question.\\n\\nReturn ONLY valid JSON.\\n\\n{\\n  \\\"question\\\":\\\"\\\",\\n  \\\"keywords\\\":\\\"\\\",\\n  \\\"category\\\":\\\"\\\",\\n  \\\"confidence\\\":0\\n}\\n\\nRules:\\n- keywords should be comma-separated.\\n- confidence must be an integer from 0 to 100.\\n- category must be one of:\\n\\nBilling\\nTechnical\\nAccount\\nSubscription\\nAPI\\nGeneral\\n\\nCustomer question:\\n{{$json.question}}\"\n        }\n      ]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        416,
+        0
+      ],
+      "id": "bc205cca-547c-434c-97e7-4584f9403d6e",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $input.first().json.candidates[0].content.parts[0].text;\n\nreturn [\n  {\n    json: JSON.parse(text)\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        0
+      ],
+      "id": "1e1fd211-32f9-4e85-a67c-57d5148e85c0",
+      "name": "Parse AI"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "knowledge_base",
+        "filters": {
+          "conditions": []
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        832,
+        0
+      ],
+      "id": "8c7524d5-e342-422b-8825-13894113b714",
+      "name": "Get Knowledge Base",
+      "credentials": {
+        "supabaseApi": {
+          "id": "en1y77HSvCMUHPbr",
+          "name": "Supabase account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const analysis = $('Parse AI').first().json;\n\nconst knowledge = $input.all().map(item => item.json);\n\nreturn [\n  {\n    json: {\n      question: analysis.question,\n      keywords: analysis.keywords,\n      category: analysis.category,\n      confidence: analysis.confidence,\n      knowledge\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1056,
+        0
+      ],
+      "id": "ca80f98e-c917-4a4c-9494-09539a38aa83",
+      "name": "Prepare Context"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "AQ.Ab8RN6KSDoQuxz9s4zdOBBKYf2itnvGtdjuxNptHDuP_GfDf3g"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  contents: [\n    {\n      parts: [\n        {\n          text: `You are an AI customer support assistant.\n\nAnswer ONLY using the knowledge base below.\n\nIf the answer is not found, respond that human support is required.\n\nReturn ONLY valid JSON.\n\n{\n  \"answer\": \"\",\n  \"found\": true,\n  \"confidence\": 0\n}\n\nRules:\n- found must be true or false.\n- confidence must be an integer from 0 to 100.\n- Never return decimals.\n- Never return values between 0 and 1.\n- Example:\n{\n  \"answer\": \"Click Forgot Password...\",\n  \"found\": true,\n  \"confidence\": 95\n}\n\nCustomer question:\n${$json.question}\n\nKnowledge Base:\n${JSON.stringify($json.knowledge, null, 2)}`\n        }\n      ]\n    }\n  ]\n}\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1264,
+        0
+      ],
+      "id": "1ddbad5a-183d-4d09-8704-ef69c8b83585",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $input.first().json.candidates[0].content.parts[0].text;\n\nreturn [\n  {\n    json: JSON.parse(text)\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1472,
+        0
+      ],
+      "id": "c10189a7-d69c-459f-bf70-d0d8fa3667a3",
+      "name": "Parse Answer"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a3176eb5-cffd-439d-864f-b08f9f06a3c3",
+              "leftValue": "={{$json.found}}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1664,
+        0
+      ],
+      "id": "cfe6bc6f-627c-480c-bfce-6dd8455b16e9",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{\n{\n  success: true,\n  answer: $json.answer,\n  confidence: $json.confidence\n}\n}}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1872,
+        -96
+      ],
+      "id": "e8c93b47-1deb-4900-856f-f9b23b0f7c39",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "chatId": "6512127938",
+        "text": "=❗ New Support Request  Customer question:  {{$('Prepare Context').first().json.question}}  AI could not find a suitable answer.  Please review manually.",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1872,
+        96
+      ],
+      "id": "e0b5deae-839f-4ce6-bcd0-356ad1d4bcbe",
+      "name": "Send a text message",
+      "webhookId": "ae3c1616-51ad-49ae-a440-7014370e8677",
+      "credentials": {
+        "telegramApi": {
+          "id": "7g3qYYDfRywaqiER",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{\n{\n  success: false,\n  message: \"Your request has been forwarded to our support team.\"\n}\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2064,
+        96
+      ],
+      "id": "826f939a-dff3-4790-96ab-f31a85ea2fa4",
+      "name": "Respond to Webhook1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Parse AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI": {
+      "main": [
+        [
+          {
+            "node": "Get Knowledge Base",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Knowledge Base": {
+      "main": [
+        [
+          {
+            "node": "Prepare Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Context": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Parse Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Answer": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "9399db6b-7b4a-40d6-9071-a7c48447bc1d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cc2ce1497fea5ef495c4fc759ceafe1145b1ecced76f0b3cadc9843ca9ce88bd"
+  },
+  "nodeGroups": [],
+  "id": "DRgCdJvfT6mUkhQ3",
+  "tags": []
+}
