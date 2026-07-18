@@ -256,4 +256,4 @@ Escalation Response
 
 # Author
 
-Built by Bek Sultan as part of an AI Automation Engineer portfolio.
+Built by Farangiz as part of an AI Automation Engineer portfolio.
